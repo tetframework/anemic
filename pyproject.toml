@@ -29,6 +29,7 @@ email = "antti.haapala@interjektio.fi"
 [project.optional-dependencies]
 dev = [
 	"pytest",
+        "pre-commit",
 ]
 
 [tool.setuptools.packages.find]
