@@ -9,13 +9,13 @@ class Factory(Protocol):
         ...
 
 
-class ContextDiscriminator(dict[type, Factory]):
+class ContextDiscriminator(dict[type | None, Factory]):
     pass
 
 
 class AdapterRegistry:
     lock: threading.RLock
-    by_type_and_name: dict[(type, str), ContextDiscriminator]
+    by_type_and_name: dict[tuple[type, str], ContextDiscriminator]
 
     def __init__(self):
         self.lock = threading.RLock()
@@ -26,7 +26,7 @@ class AdapterRegistry:
         *,
         interface: type = object,
         name: str = "",
-        context_type: type|None = None,
+        context_type: type | None = None,
     ):
         return self.by_type_and_name[interface, name][context_type]
 
@@ -35,7 +35,7 @@ class AdapterRegistry:
         *,
         interface=object,
         name: str = "",
-        context_type: type|None = None,
+        context_type: type | None = None,
         factory: Factory,
     ):
         with self.lock:
@@ -57,12 +57,10 @@ class FactoryRegistry:
         interface=object,
         name: str = "",
         factory: Factory,
-        context_type: type|None = None,
+        context_type: type | None = None,
     ):
         if not self.supports_contexts and context_type is not None:
-            raise TypeError(
-                f"FactoryRegistry({self.scope}) does not support contexts"
-            )
+            raise TypeError(f"FactoryRegistry({self.scope}) does not support contexts")
 
         self.registry.set(
             interface=interface,
@@ -76,13 +74,11 @@ class FactoryRegistry:
         *,
         interface=object,
         name: str = "",
-        context_type: type|None = None,
+        context_type: type | None = None,
         singleton: Any,
     ):
         if not self.supports_contexts and context_type is not None:
-            raise TypeError(
-                f"FactoryRegistry({self.scope}) does not support contexts"
-            )
+            raise TypeError(f"FactoryRegistry({self.scope}) does not support contexts")
 
         self.registry.set(
             interface=interface,
@@ -96,12 +92,10 @@ class FactoryRegistry:
         *,
         interface: type = object,
         name: str = "",
-        context_type: type|None = None,
+        context_type: type | None = None,
     ):
         if not self.supports_contexts and context_type is not None:
-            raise TypeError(
-                f"FactoryRegistry({self.scope}) does not support contexts"
-            )
+            raise TypeError(f"FactoryRegistry({self.scope}) does not support contexts")
 
         return self.registry.get(
             interface=interface,
@@ -155,9 +149,7 @@ class ContextServiceCache:
                 try:
                     weakref.finalize(context, self.cache.pop, id_, None)
                 except TypeError:
-                    raise TypeError(
-                        f"Context {context} is not weakly referenceable"
-                    )
+                    raise TypeError(f"Context {context} is not weakly referenceable")
 
             if id_ not in self.cache:
                 self.cache[id_] = ServiceCache()
@@ -171,7 +163,7 @@ class IOCContainer:
     def __init__(
         self,
         factory_registry: FactoryRegistry,
-        parent: "IOCContainer" = None,
+        parent: "IOCContainer | None" = None,
     ):
         self.factory_registry = factory_registry
         self.context_caches = ContextServiceCache()
@@ -228,8 +220,9 @@ class IOCContainer:
                 context=context,
             )
         else:
+            reported: Any = interface
             if interface is object:
-                interface = Any
+                reported = Any
 
             raise LookupError(
                 f"Could not resolve {interface.__name__} named {name!r} in context {context}"

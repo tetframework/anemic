@@ -35,4 +35,3 @@ dev = [
 where = ["src"]
 include = ["anemic.*"]
 namespaces = false
-

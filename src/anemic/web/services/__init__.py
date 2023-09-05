@@ -7,14 +7,14 @@ from anemic.decorators import reify_attr
 from zope.interface import Interface
 from zope.interface.interface import InterfaceClass
 
-_to_underscores = re.compile('((?<=[a-z0-9])[A-Z]|(?!^)[A-Z](?=[a-z]))')
+_to_underscores = re.compile("((?<=[a-z0-9])[A-Z]|(?!^)[A-Z](?=[a-z]))")
 
 
 def _underscore(name):
-    return _to_underscores.sub(r'_\1', name).lower()
+    return _to_underscores.sub(r"_\1", name).lower()
 
 
-_is_iface_name = re.compile('^I[A-Z].*')
+_is_iface_name = re.compile("^I[A-Z].*")
 
 
 class ServiceRegistry(object):
@@ -31,38 +31,35 @@ class ServiceRegistry(object):
 
 
 def get_service_registry(registry):
-    if not hasattr(registry, 'services'):
+    if not hasattr(registry, "services"):
         registry.services = ServiceRegistry()
 
     return registry.services
 
 
-def register_anemic_service(config: Configurator,
-                         service_factory,
-                         *,
-                         scope='global',
-                         interface=Interface,
-                         name='',
-                         context_iface=Interface):
+def register_anemic_service(
+    config: Configurator,
+    service_factory,
+    *,
+    scope="global",
+    interface=Interface,
+    name="",
+    context_iface=Interface,
+):
     registry = config.registry
-    if scope == 'global':
+    if scope == "global":
         # register only once
         if registry.queryUtility(interface, name=name) is None:
             ob_instance = service_factory(registry=registry)
-            get_service_registry(registry)._register_service(ob_instance,
-                                                             interface)
+            get_service_registry(registry)._register_service(ob_instance, interface)
 
             # only classes can be registered.
             if isinstance(interface, InterfaceClass):
-                registry.registerUtility(ob_instance,
-                                         interface,
-                                         name=name)
+                registry.registerUtility(ob_instance, interface, name=name)
 
             config.register_service(
-                service=ob_instance,
-                iface=interface,
-                context=context_iface,
-                name=name)
+                service=ob_instance, iface=interface, context=context_iface, name=name
+            )
 
     else:
         # noinspection PyUnusedLocal
@@ -70,20 +67,15 @@ def register_anemic_service(config: Configurator,
             return service_factory(request=request)
 
         config.register_service_factory(
-            wrapped_factory,
-            interface,
-            context_iface,
-            name=name)
+            wrapped_factory, interface, context_iface, name=name
+        )
 
 
-def service(interface=Interface,
-            name='',
-            context_iface=Interface,
-            scope='global'):
-    if scope not in {'global', 'request'}:
+def service(interface=Interface, name="", context_iface=Interface, scope="global"):
+    if scope not in {"global", "request"}:
         raise ValueError(
-            "Invalid scope {}, must be either 'global' or 'request'"
-                .format(scope))
+            "Invalid scope {}, must be either 'global' or 'request'".format(scope)
+        )
 
     service_name = name
 
@@ -95,22 +87,22 @@ def service(interface=Interface,
                 name=service_name,
                 interface=interface,
                 context_iface=context_iface,
-                scope=scope
+                scope=scope,
             )
 
-        venusian.attach(wrapped, callback, category='anemic.service')
+        venusian.attach(wrapped, callback, category="anemic.service")
         return wrapped
 
     return service_decorator
 
 
-T = TypeVar('T', bound=object)
+T = TypeVar("T", bound=object)
 
 
-def autowired(interface: Type[T] = Interface, name: str = '') -> T:
-    @reify_attr
-    def getter(self):
-        if hasattr(self, 'request'):
+def autowired(interface: Type[T] = Interface, name: str = "") -> reify_attr[T]:
+    @reify_attr[T]
+    def getter(self) -> T:
+        if hasattr(self, "request"):
             # remove context discrimination. It didn't work anyway.
             return self.request.find_service(interface, None, name)
 
@@ -122,7 +114,7 @@ def autowired(interface: Type[T] = Interface, name: str = '') -> T:
 class BaseService(object):
     def __init__(self, **kw):
         try:
-            self.registry = kw.pop('registry')
+            self.registry = kw.pop("registry")
             super(BaseService, self).__init__(**kw)
 
         except KeyError:
@@ -136,8 +128,8 @@ class RequestScopedBaseService(BaseService):
 
     def __init__(self, **kw):
         try:
-            self.request = kw.pop('request')
-            kw['registry'] = self.request.registry
+            self.request = kw.pop("request")
+            kw["registry"] = self.request.registry
             super(RequestScopedBaseService, self).__init__(**kw)
 
         except KeyError:
@@ -145,12 +137,12 @@ class RequestScopedBaseService(BaseService):
 
 
 def scan_services(config, *a, **kw):
-    kw['categories'] = ('anemic.service',)
+    kw["categories"] = ("anemic.service",)
     return config.scan(*a, **kw)
 
 
 def includeme(config):
-    config.include('pyramid_services')
-    config.add_directive('scan_services', scan_services)
-    config.add_directive('register_anemic_service', register_anemic_service)
+    config.include("pyramid_services")
+    config.add_directive("scan_services", scan_services)
+    config.add_directive("register_anemic_service", register_anemic_service)
     config.registry.services = ServiceRegistry()

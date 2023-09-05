@@ -1,5 +1,7 @@
 import warnings
 from functools import update_wrapper
+from typing import TypeVar, Generic
+from typing import overload
 
 
 def deprecated(func):
@@ -9,8 +11,12 @@ def deprecated(func):
 
     def new_func(*args, **kwargs):
         warnings.warn(
-            "Call to deprecated function {}."
-            .format(func.__qualname__, category=DeprecationWarning, stacklevel=2))
+            "Call to deprecated function {}.".format(
+                func.__qualname__,
+            ),
+            category=warnings.DeprecationWarning,
+            stacklevel=2,
+        )
 
         return func(*args, **kwargs)
 
@@ -20,31 +26,35 @@ def deprecated(func):
     return new_func
 
 
-class reify_attr(object):
+T = TypeVar("T")
+
+
+class reify_attr(object, Generic[T]):
     """
     reify_attr is like pyramid reify, but instead of getting the name of the
-    attribute from the decorated method, it uses the name of actual attribute,
-    by finding it on the class in Python <=3.5, and using the ``__set_name__``
-    on Python 3.6.
+    attribute from the decorated method, it uses the name of actual attribute.
     """
+
     def __init__(self, wrapped):
         self.wrapped = wrapped
         update_wrapper(self, wrapped)
         self.names = None
 
-    def __get__(self, inst, objtype=None):
+    @overload
+    def __get__(self, inst: None, objtype: None) -> reify_attr[T]:
+        ...
+
+    @overload
+    def __get__(self, inst: object, objtype: type[object]) -> T:
+        ...
+
+    def __get__(
+        self, inst: object | None, objtype: type[object] | None = None
+    ) -> reify_attr[T] | T:
         if inst is None:
             return self
 
         val = self.wrapped(inst)
-        if self.names is None:
-            names = []
-            for name, value in list(objtype.__dict__.items()):
-                if value is self:
-                    names.append(name)
-
-            self.names = names
-
         for name in self.names:
             setattr(inst, name, val)
 
