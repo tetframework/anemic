@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import warnings
 from functools import update_wrapper
 from typing import TypeVar, Generic
@@ -29,7 +31,7 @@ def deprecated(func):
 T = TypeVar("T")
 
 
-class reify_attr(object, Generic[T]):
+class reify_attr(Generic[T]):
     """
     reify_attr is like pyramid reify, but instead of getting the name of the
     attribute from the decorated method, it uses the name of actual attribute.
