@@ -1,12 +1,47 @@
+import sys
 import threading
+import types
 import weakref
 from types import NoneType
-from typing import Protocol, Any, Generic, TypeVar, overload, get_type_hints
+from typing import (
+    Protocol,
+    Any,
+    Generic,
+    TypeVar,
+    overload,
+    get_type_hints,
+    Container,
+    Iterable,
+    Callable,
+    Sequence,
+    IO,
+)
+
+try:
+    import venusian
+
+    venusian_attach = venusian.attach
+except ImportError:
+    venusian = None
+
+    def venusian_attach(*a, **kw):
+        pass
 
 
 class Factory(Protocol):
-    def __call__(self, container: "IOCContainer") -> Any:  # pragma: no cover
-        ...
+    """
+    A factory for services. A factory is a callable that takes a container
+    and returns a service.
+    """
+
+    def __call__(self, container: "Container") -> Any:  # pragma: no cover
+        """
+        Create a service.
+
+        :param container: The container to pass to the service for
+        dependencies
+        :return: The newly created service
+        """
 
 
 class _AutoMeta(type):
@@ -15,13 +50,30 @@ class _AutoMeta(type):
 
 
 class auto(metaclass=_AutoMeta):
-    pass
+    """
+    A special value that can be used as an interface to autowire a service.
+    The interface is resolved from the type hint of the attribute the `autowired`
+    descriptor is assigned to.
+    """
 
+
+this = object()
 
 T = TypeVar("T")
 
 
 class autowired(Generic[T]):
+    """
+    A descriptor that resolves a service from a container. The descriptor
+    resolves the service when it is accessed, and caches the service for the
+    lifetime of the object it is accessed from.
+
+    The descriptor can be used in a class definition to resolve a service
+
+            class Foo:
+                bar: Bar = autowired(auto)
+    """
+
     interface: type[T] | type[object] | None = None
     names: list[str]
 
@@ -86,13 +138,13 @@ class autowired(Generic[T]):
             self.interface = hints.get(name, None)
 
 
-class ContextDiscriminator(dict[type | None, Factory]):
+class _ContextDiscriminator(dict[type | None, Factory]):
     pass
 
 
-class AdapterRegistry:
+class _AdapterRegistry:
     lock: threading.RLock
-    by_type_and_name: dict[tuple[type, str], ContextDiscriminator]
+    by_type_and_name: dict[tuple[type, str], _ContextDiscriminator]
 
     def __init__(self):
         self.lock = threading.RLock()
@@ -110,14 +162,14 @@ class AdapterRegistry:
     def set(
         self,
         *,
-        interface=object,
+        interface: type = object,
         name: str = "",
         context_type: type | None = None,
         factory: Factory,
     ):
         with self.lock:
             if (interface, name) not in self.by_type_and_name:
-                self.by_type_and_name[interface, name] = ContextDiscriminator()
+                self.by_type_and_name[interface, name] = _ContextDiscriminator()
 
             self.by_type_and_name[interface, name][context_type] = factory
 
@@ -125,13 +177,13 @@ class AdapterRegistry:
 class FactoryRegistry:
     def __init__(self, scope: str, supports_contexts: bool = False):
         self.scope = scope
-        self.registry = AdapterRegistry()
+        self.registry = _AdapterRegistry()
         self.supports_contexts = supports_contexts
 
     def register(
         self,
         *,
-        interface=object,
+        interface: type = object,
         name: str = "",
         factory: Factory,
         context_type: type | None = None,
@@ -180,8 +232,129 @@ class FactoryRegistry:
             context_type=context_type,
         )
 
+    def dump(self, indent: int = 0, stream: IO[str] | None = None) -> None:
+        """
+        Dump the registry to the given stream. If no stream is given,
+        sys.stderr is used.
 
-class ServiceCache:
+        :param indent: The indentation level to use
+        :param stream: The stream to dump to
+        """
+
+        if stream is None:
+            stream = sys.stderr
+
+        for (
+            interface,
+            name,
+        ), context_discriminator in self.registry.by_type_and_name.items():
+            print(
+                " " * indent + f"Factory for {interface.__qualname__} named "
+                f"{name!r}:",
+                file=stream,
+            )
+            for context_type, factory in context_discriminator.items():
+                print(
+                    " " * (indent + 4) + f"Context {context_type}: {factory}",
+                    file=stream,
+                )
+
+
+class FactoryRegistrySet:
+    """
+    A set of registries for different scopes. A registry set can create new
+    registries for scopes, and scan packages for services.
+    """
+
+    _registries: dict[str, FactoryRegistry]
+
+    def __init__(self):
+        self._registries = {}
+
+    def create_registry(
+        self, scope: str, supports_contexts: bool = False
+    ) -> FactoryRegistry:
+        """
+        Create a new registry for a scope. If a registry for the scope already
+        exists, a KeyError is raised.
+
+        :param scope: The scope to create the registry for
+        :param supports_contexts: Whether the registry supports contexts
+        :return: The created registry
+        """
+        if scope in self._registries:
+            raise KeyError(f"Registry for scope {scope!r} already exists")
+
+        registry = FactoryRegistry(scope, supports_contexts)
+        self._registries[scope] = registry
+        return registry
+
+    def get_registry(self, scope: str) -> FactoryRegistry:
+        """
+        Get a registry for a scope. If a registry for the scope does not exist,
+        a KeyError is raised.
+
+        :param scope: The scope to get the registry for
+        :return: The registry
+        """
+        try:
+            return self._registries[scope]
+        except KeyError:
+            raise KeyError(f"No registry for scope {scope!r}")
+
+    def scan_services(
+        self,
+        package: types.ModuleType,
+        *,
+        categories: Iterable[str] = ("anemic.service",),
+        onerror: Callable[[str], None] | None = None,
+        ignore: Sequence[str | Callable[[str], bool]] | None = None,
+    ):
+        """
+        Scan a package or module for services. The package is scanned using
+        venusian.
+        If venusian is not installed, a RuntimeError is raised.
+
+        :param package: The package or module to scan
+        :param categories: The categories to scan for. Defaults to only
+        `"anemic.service"`
+        :param onerror: A callback to call when an error occurs. Defaults to
+        None. See venusian.Scanner.scan for more information
+        :param ignore: A list of names or callables to ignore. Defaults to
+        None. See venusian.Scanner.scan for more information
+        """
+        if venusian is None:
+            raise RuntimeError(
+                "Venusian is not installed but it is required for scanning"
+            )
+
+        scanner = venusian.Scanner(registry_set=self)
+
+        scanner.scan(
+            package,
+            categories=tuple(categories),
+            onerror=onerror,
+            ignore=ignore,
+        )
+
+    def dump(self, indent: int = 0, stream: IO[str] | None = None) -> None:
+        """
+        Dump the registries in the registry set to given stream.
+        If no stream is given, sys.stderr is used.
+
+        :param indent: The indentation level to use
+        :param stream: The stream to dump to
+        """
+
+        if stream is None:
+            stream = sys.stderr
+
+        for scope, registry in self._registries.items():
+            print(" " * indent + f"Registry for scope {scope!r}:", file=stream)
+            registry.dump(indent + 4, stream=stream)
+
+
+class _ServiceCache:
     lock: threading.RLock
 
     def __init__(self):
@@ -208,7 +381,7 @@ class ServiceCache:
             self.cache[interface, name] = service
 
 
-class ContextServiceCache:
+class _ContextServiceCache:
     lock: threading.RLock
 
     def __init__(self):
@@ -229,21 +402,35 @@ class ContextServiceCache:
                     raise TypeError(f"Context {context} is not weakly referenceable")
 
             if id_ not in self.cache:
-                self.cache[id_] = ServiceCache()
+                self.cache[id_] = _ServiceCache()
 
             return self.cache[id_]
 
 
-class IOCContainer:
-    context_caches: ContextServiceCache
+class Container:
+    """
+    A container for services. A container resolves services from a registry,
+    and caches them for the lifetime of the container. A container can have a
+    parent container, which is used to resolve services that are not registered
+    in the container itself.
+    """
+
+    context_caches: _ContextServiceCache
 
     def __init__(
         self,
         factory_registry: FactoryRegistry,
-        parent: "IOCContainer | None" = None,
+        parent: "Container | None" = None,
     ):
+        """
+        Create a new container.
+
+        :param factory_registry: The registry to resolve services from
+        :param parent: The parent container to resolve services from if they
+        are not registered in this container
+        """
         self.factory_registry = factory_registry
-        self.context_caches = ContextServiceCache()
+        self.context_caches = _ContextServiceCache()
         self.scope = factory_registry.scope
         self.parent = parent
 
@@ -261,6 +448,17 @@ class IOCContainer:
         name: str = "",
         context: Any = None,
     ):
+        """
+        Resolve a service from the registry. If the service is not registered
+        in the registry, the parent container is used to resolve the service.
+        If the service is not registered in the parent container, a LookupError
+        is raised.
+
+        :param interface: The interface to resolve the service for
+        :param name: The name to resolve the service for
+        :param context: The context to resolve the service for
+        :return: The resolved service
+        """
         if not self.factory_registry.supports_contexts:
             context = None
 
@@ -301,6 +499,66 @@ class IOCContainer:
             if interface is object:
                 reported = Any
 
+            name_part = ""
+            if name:
+                name_part = f" named {name!r}"
+
+            context_part = ""
+            if context:
+                context_part = f" (in context {context!r})"
+
             raise LookupError(
-                f"Could not resolve {interface.__name__} named {name!r} in context {context}"
+                f"Could not resolve a factory for {interface.__name__}"
+                f"{name_part}"
+                f"{context_part}"
             )
+
+
+def service(
+    interface_override: type | None = None,
+    *,
+    name: str = "",
+    context_type: type | None = None,
+    scope: str,
+):
+    """
+    A decorator that registers a service factory in a registry.
+
+    :param interface_override: The interface to register the service under.
+    If not specified, the interface is the decorated class
+    :param name: The name to register the service under. If not specified,
+    the name is empty (corresponding to unnamed services)
+    :param context_type: The context type to register the service under.
+    If not specified, the context type is not set. If specified, the scoped
+    registry must support contexts.
+    :param scope: The scope to register the service under. The scope must be
+    supported by the registry.
+    """
+    registration_name = name
+
+    def service_decorator(wrapped):
+        def callback(scanner, name, ob):
+            interface = interface_override
+            if interface is None:
+                interface = ob
+
+            registry_set: FactoryRegistrySet = scanner.registry_set
+            registry = registry_set.get_registry(scope)
+
+            print(
+                f"Registering {interface.__name__} named "
+                f"{registration_name!r} in "
+                f"context {context_type}"
+                f" in scope {scope}",
+            )
+            registry.register(
+                interface=interface,
+                name=registration_name,
+                context_type=context_type,
+                factory=ob,
+            )
+
+        venusian_attach(wrapped, callback, category="anemic.service")
+        return wrapped
+
+    return service_decorator

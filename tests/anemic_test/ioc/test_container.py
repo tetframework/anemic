@@ -2,8 +2,15 @@
 from itertools import count
 from unittest.mock import sentinel
 
+import pytest
 from pytest import raises
-from anemic.ioc.container import IOCContainer, FactoryRegistry, autowired, auto
+from anemic.ioc import (
+    Container,
+    FactoryRegistry,
+    autowired,
+    auto,
+    FactoryRegistrySet,
+)
 
 
 def test_ioc_container():
@@ -15,7 +22,7 @@ def test_ioc_container():
 
     bar_called = 0
 
-    def bar_factory(container: IOCContainer):
+    def bar_factory(container: Container):
         nonlocal bar_called
         bar_called += 1
         return bar_called
@@ -24,9 +31,9 @@ def test_ioc_container():
     application_registry.register(name="barf", factory=bar_factory)
     request_registry.register(name="barfoo", factory=bar_factory)
 
-    app_container = IOCContainer(application_registry)
-    request_container = IOCContainer(request_registry, app_container)
-    request_container2 = IOCContainer(request_registry, app_container)
+    app_container = Container(application_registry)
+    request_container = Container(request_registry, app_container)
+    request_container2 = Container(request_registry, app_container)
     assert request_container.get(name="foo") is foo
     assert request_container.get(name="bar") == 1
     assert request_container.get(name="bar") == 1
@@ -53,9 +60,9 @@ def test_interfaces():
     application_registry = FactoryRegistry("application")
     request_registry = FactoryRegistry("request")
 
-    app_container = IOCContainer(application_registry)
-    request_container = IOCContainer(request_registry, app_container)
-    request_container2 = IOCContainer(request_registry, app_container)
+    app_container = Container(application_registry)
+    request_container = Container(request_registry, app_container)
+    request_container2 = Container(request_registry, app_container)
 
     ct = count(1)
 
@@ -99,9 +106,9 @@ def test_contexts():
     application_registry = FactoryRegistry("application")
     request_registry = FactoryRegistry("request", supports_contexts=True)
 
-    app_container = IOCContainer(application_registry)
-    request_container = IOCContainer(request_registry, app_container)
-    request_container2 = IOCContainer(request_registry, app_container)
+    app_container = Container(application_registry)
+    request_container = Container(request_registry, app_container)
+    request_container2 = Container(request_registry, app_container)
 
     ct = count(1)
 
@@ -158,9 +165,9 @@ def test_container_raises_when_illegal_context():
         )
 
     request_registry = FactoryRegistry("request", supports_contexts=True)
-    request_container = IOCContainer(
+    request_container = Container(
         request_registry,
-        IOCContainer(application_registry),
+        Container(application_registry),
     )
 
     request_registry.register_singleton(
@@ -187,53 +194,80 @@ def test_resolve_with_context_type_throws_on_context_not_supported():
     application_registry.resolve(name="foo", context_type=None)
 
 
-class Bar:
-    def __init__(self, container):
-        self.container = container
-
-
-class Foo:
-    bar: Bar = autowired(auto)
-    barf: "Bar" = autowired(auto, name="bar2")
-    barc: "Bar" = bar
-
-    def __init__(self, container):
-        self.container = container
-
-    def assert_self(self):
-        assert isinstance(self.bar, Bar)
-        assert isinstance(self.barf, Bar)
-        assert self.bar.container is not self.container
-        assert self.barf.container is not self.container
-        assert self.bar.container is self.barf.container
-
-        assert self.bar is not self.barf
-        assert self.barc is self.bar
-
-
 def test_autowired():
     application_registry = FactoryRegistry("application")
 
     application_registry.register(
-        interface=Bar,
-        factory=Bar,
+        interface=services.Bar,
+        factory=services.Bar,
     )
 
     application_registry.register(
-        interface=Bar,
-        factory=Bar,
-        name="bar2",
+        interface=services.Bar,
+        factory=services.Bar,
+        name="named_bar",
     )
 
     request_registry = FactoryRegistry("request", supports_contexts=True)
     request_registry.register(
-        interface=Foo,
-        factory=Foo,
+        interface=services.Foo,
+        factory=services.Foo,
     )
 
-    request_container = IOCContainer(
+    request_container = Container(
         request_registry,
-        IOCContainer(application_registry),
+        Container(application_registry),
     )
 
-    request_container.get(interface=Foo).assert_self()
+    assert request_container.get(interface=services.Foo).delegate() == "delegated: 1"
+    assert (
+        request_container.get(interface=services.Foo).delegate_to_named()
+        == "delegated to named: 1"
+    )
+    assert (
+        request_container.get(interface=services.Foo).delegate_to_named()
+        == "delegated to named: 2"
+    )
+
+
+try:
+    import venusian
+except ImportError:
+    venusian = None
+
+from . import services
+
+
+@pytest.mark.skipif(venusian is None, reason="venusian not installed")
+def test_service_decorator():
+    registry_set = FactoryRegistrySet()
+
+    application_scope_registry = registry_set.create_registry("application")
+    request_scope_registry = registry_set.create_registry("request")
+
+    registry_set.scan_services(services)
+    registry_set.dump()
+
+    app_container = Container(application_scope_registry)
+    req_cont_1 = Container(request_scope_registry, parent=app_container)
+    req_cont_2 = Container(request_scope_registry, parent=app_container)
+
+    assert req_cont_1.get(interface=services.Bar).delegate() == 1
+    assert req_cont_2.get(interface=services.Bar).delegate() == 2
+    assert req_cont_1.get(interface=services.Foo).delegate() == "delegated: 3"
+    assert req_cont_2.get(interface=services.Foo).delegate() == "delegated: 4"
+
+    # the following test must raise LookupError
+    with raises(LookupError):
+        req_cont_1.get(interface=services.Foo).delegate_to_named()
+
+    application_scope_registry.register(
+        interface=services.Bar,
+        factory=services.Bar,
+        name="named_bar",
+    )
+
+    assert (
+        req_cont_1.get(interface=services.Foo).delegate_to_named()
+        == "delegated to named: 1"
+    )
