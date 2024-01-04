@@ -2,3 +2,4 @@ Sphinx >= 3.0.0
 docutils
 sphinx-copybutton
 sphinxcontrib-autoprogram
+sphinx-rtd-theme
