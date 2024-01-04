@@ -1,0 +1,33 @@
+.rst-content .sphinx\_autodoc\_typehints-type {
+    font-weight: 700;
+    color: #404040;
+    overflow-wrap: normal;
+    white-space: normal;
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, Courier, monospace;
+    font-size: 85%;
+}
+
+.rst-content .sphinx\_autodoc\_typehints-type a, .rst-content sphinx\_autodoc\_typehints-type span, .rst-content .sphinx\_autodoc\_typehints-type code {
+    padding: 0;
+    border: 0;
+    font-size: revert;
+}
+
+.rst-content dt.sig {
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, Courier, monospace;
+}
+
+.rst-content dt.sig span.viewcode-link {
+    font-family: Lato, proxima-nova, Helvetica Neue, Arial, sans-serif;
+}
+
+.rst-content code {
+    padding: 0;
+    border: 0;
+    font-size: 85%;
+}
+
+.rst-content a.reference code {
+    padding: 0;
+    border: 0;
+}

@@ -39,7 +39,7 @@ class Factory(Protocol):
         Create a service.
 
         :param container: The container to pass to the service for
-        dependencies
+           dependencies
         :return: The newly created service
         """
 
@@ -70,8 +70,10 @@ class autowired(Generic[T]):
 
     The descriptor can be used in a class definition to resolve a service
 
-            class Foo:
-                bar: Bar = autowired(auto)
+    .. code-block:: python
+
+        class Foo:
+            bar: Bar = autowired(auto)
     """
 
     interface: type[T] | type[object] | None = None
@@ -316,12 +318,16 @@ class FactoryRegistrySet:
         If venusian is not installed, a RuntimeError is raised.
 
         :param package: The package or module to scan
+
         :param categories: The categories to scan for. Defaults to only
-        `"anemic.service"`
+           `"anemic.service"`
+
         :param onerror: A callback to call when an error occurs. Defaults to
-        None. See venusian.Scanner.scan for more information
+           None. See :py:meth:`venusian.Scanner.scan` for more information
+
         :param ignore: A list of names or callables to ignore. Defaults to
-        None. See venusian.Scanner.scan for more information
+           None. See :py:meth:`venusian.Scanner.scan` for more information
+
         """
         if venusian is None:
             raise RuntimeError(
