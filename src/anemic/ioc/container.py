@@ -1,12 +1,89 @@
 import threading
 import weakref
 from types import NoneType
-from typing import Protocol, Any
+from typing import Protocol, Any, Generic, TypeVar, overload, get_type_hints
 
 
 class Factory(Protocol):
     def __call__(self, container: "IOCContainer") -> Any:  # pragma: no cover
         ...
+
+
+class _AutoMeta(type):
+    def __repr__(self):
+        return "<auto>"
+
+
+class auto(metaclass=_AutoMeta):
+    pass
+
+
+T = TypeVar("T")
+
+
+class autowired(Generic[T]):
+    interface: type[T] | type[object] | None = None
+    names: list[str]
+
+    def __init__(
+        self,
+        interface: type[T] | type[object] = object,
+        *,
+        name: str = "",
+        context: Any = None,
+    ):
+        if interface is not auto:
+            self.interface = interface
+
+        self.iname = name
+        self.context = context
+        self.names: list[str] = []
+
+    @overload
+    def __get__(self, inst: None, objtype: None) -> "autowired[T]":
+        ...
+
+    @overload
+    def __get__(self: "autowired[auto]", inst: Any, objtype: None) -> Any:
+        ...
+
+    @overload
+    def __get__(self: "autowired[object]", inst: Any, objtype: None) -> Any:
+        ...
+
+    @overload
+    def __get__(self, inst: Any, objtype: Any = None) -> T:
+        ...
+
+    def __get__(
+        self, inst: object | None, objtype: type[object] | None = None
+    ) -> T | "autowired[T]":
+        if inst is None:
+            return self
+
+        if self.interface is None:
+            raise TypeError(
+                "Cannot use autowired with `auto` interface without "
+                "explicitly specifying the interface in a type hint."
+            )
+
+        val = inst.container.get(
+            interface=self.interface,
+            name=self.iname,
+            context=self.context,
+        )
+
+        for name in self.names:
+            setattr(inst, name, val)
+
+        return val
+
+    def __set_name__(self, owner, name):
+        self.names.append(name)
+
+        if self.interface is None:
+            hints = get_type_hints(owner)
+            self.interface = hints.get(name, None)
 
 
 class ContextDiscriminator(dict[type | None, Factory]):

@@ -3,7 +3,7 @@ from itertools import count
 from unittest.mock import sentinel
 
 from pytest import raises
-from anemic.ioc.container import IOCContainer, FactoryRegistry
+from anemic.ioc.container import IOCContainer, FactoryRegistry, autowired, auto
 
 
 def test_ioc_container():
@@ -185,3 +185,55 @@ def test_resolve_with_context_type_throws_on_context_not_supported():
 
     # does not raise when context_type is None
     application_registry.resolve(name="foo", context_type=None)
+
+
+class Bar:
+    def __init__(self, container):
+        self.container = container
+
+
+class Foo:
+    bar: Bar = autowired(auto)
+    barf: "Bar" = autowired(auto, name="bar2")
+    barc: "Bar" = bar
+
+    def __init__(self, container):
+        self.container = container
+
+    def assert_self(self):
+        assert isinstance(self.bar, Bar)
+        assert isinstance(self.barf, Bar)
+        assert self.bar.container is not self.container
+        assert self.barf.container is not self.container
+        assert self.bar.container is self.barf.container
+
+        assert self.bar is not self.barf
+        assert self.barc is self.bar
+
+
+def test_autowired():
+    application_registry = FactoryRegistry("application")
+
+    application_registry.register(
+        interface=Bar,
+        factory=Bar,
+    )
+
+    application_registry.register(
+        interface=Bar,
+        factory=Bar,
+        name="bar2",
+    )
+
+    request_registry = FactoryRegistry("request", supports_contexts=True)
+    request_registry.register(
+        interface=Foo,
+        factory=Foo,
+    )
+
+    request_container = IOCContainer(
+        request_registry,
+        IOCContainer(application_registry),
+    )
+
+    request_container.get(interface=Foo).assert_self()
