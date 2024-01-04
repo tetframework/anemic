@@ -20,10 +20,10 @@ release = "0.0.1"
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
+    "sphinx.ext.intersphinx",
     "sphinx.ext.autodoc",
     "sphinx_autodoc_typehints",
     "sphinx.ext.doctest",
-    "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
     "sphinx_copybutton",
 ]
@@ -49,7 +49,7 @@ html_theme_options = {}
 
 html_context = {
     "display_github": True,
-    "github_user": "interjektio",
+    "github_user": "tetframework",
     "github_repo": "anemic",
     "github_version": "main",
     "conf_py_path": "/docs/",
