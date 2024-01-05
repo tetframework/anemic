@@ -29,7 +29,18 @@ extensions = [
     "hoverxref.extension",
 ]
 
+hoverxref_role_types = {
+    "hoverxref": "tooltip",
+    "ref": "modal",
+    "confval": "tooltip",
+    "mod": "modal",
+    "class": "modal",
+    "obj": "tooltip",
+}
+
 hoverxref_domains = [
+    "py",
+    "cite",
     "python",
     "readthedocs",
     "venusian",
@@ -98,6 +109,9 @@ def lib_role(role, rawtext, text, lineno, inliner, options=None, content=None):
         del options["class"]
 
     return [nodes.inline(rawtext, utils.unescape(text), **options)], []
+
+
+epub_exclude_files = ["search.html"]
 
 
 def setup(app):
