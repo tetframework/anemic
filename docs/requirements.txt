@@ -4,3 +4,4 @@ sphinx-copybutton
 sphinxcontrib-autoprogram
 sphinx-rtd-theme
 sphinx_autodoc_typehints
+sphinx-hoverxref

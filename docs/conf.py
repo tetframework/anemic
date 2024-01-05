@@ -26,7 +26,32 @@ extensions = [
     "sphinx.ext.doctest",
     "sphinx.ext.viewcode",
     "sphinx_copybutton",
+    "hoverxref.extension",
 ]
+
+hoverxref_domains = [
+    "python",
+    "readthedocs",
+    "venusian",
+]
+
+hoverxref_intersphinx_types = {
+    # make specific links to use a particular tooltip type
+    "readthedocs": {
+        "doc": "modal",
+        "ref": "tooltip",
+    },
+    "python": {
+        "class": "modal",
+        "ref": "tooltip",
+    },
+    "venusian": {
+        "class": "modal",
+        "ref": "tooltip",
+    },
+    # make all links for Sphinx to be ``tooltip``
+    "sphinx": "tooltip",
+}
 
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
