@@ -86,6 +86,10 @@ class autowired(Generic[T]):
         name: str = "",
         context: Any = None,
     ):
+        """
+        :param interface: The interface to resolve the service for. If not
+              specified, the interface is resolved from the type hint of the
+        """
         if interface is not auto:
             self.interface = interface
 

@@ -31,3 +31,12 @@
     padding: 0;
     border: 0;
 }
+
+/* Make external links stand out from teletype text. */
+.rst-content a.reference.external > code > span {
+  color: #2980B9;
+}
+
+.rst-content a.reference.internal > code > span {
+  color: #27ae60;
+}
