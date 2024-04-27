@@ -1,8 +1,8 @@
+import logging
 import sys
 import threading
 import types
 import weakref
-from types import NoneType
 from typing import (
     Protocol,
     Any,
@@ -26,6 +26,9 @@ except ImportError:
 
     def venusian_attach(*a, **kw):
         pass
+
+
+logger = logging.getLogger(__name__)
 
 
 class Factory(Protocol):
@@ -555,11 +558,12 @@ def service(
             registry_set: FactoryRegistrySet = scanner.registry_set
             registry = registry_set.get_registry(scope)
 
-            print(
-                f"Registering {interface.__name__} named "
-                f"{registration_name!r} in "
-                f"context {context_type}"
-                f" in scope {scope}",
+            logger.debug(
+                "Registering %s named %r in context %s in scope %s",
+                interface.__name__,
+                registration_name,
+                context_type,
+                scope,
             )
             registry.register(
                 interface=interface,
